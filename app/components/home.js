@@ -10,12 +10,16 @@ import {
     ListView,
     ActivityIndicator,
     RefreshControl,
-    Modal
+    Modal,
+    Animated,
+    Easing,
+    FlatList
 } from 'react-native';
 
 
 import Icon from 'react-native-vector-icons/Icomoon';
-import TabBar from './tabBar';
+import TabBar from './my-componets/tabBar';
+import MyList from './my-componets/myList';
 import NewsItem from './newsItem';
 import fetchRequest from '../util/fetchRequest';
 import { fetchNews, saveNavigation, isWriting } from '../actions/index';
@@ -33,42 +37,100 @@ const cacheNews = {
 class Home extends Component {
     constructor() {
         super();
-        let ds = new ListView.DataSource({ rowHasChanged: (r1, r2) => r1 !== r2 });
         this.state = {
             selectedTab: 'home',
-            dataSource: ds.cloneWithRows([]),
+            dataList: [],
             currentPage: 1,
-            isLoading: false,
             isRefreshing: false,
             animating: false,
-            isWriting: false
+            isWriting: false,
+            refreshText:'下拉刷新',
+            rotateValue:new Animated.Value(0),
+            isLoadingMoved:false,
+            isLoading:false
         }
 
     }
 
 
     componentDidMount() {
-
-
         this.props.saveNavigation(this.props.navigation);
         this._fetchNews(this.state.currentPage);
         this.props.toWrite(false);
     }
 
-    _renderRow(rowData, sectionId, rowId) {
-        return (<NewsItem name={rowData} index={rowId}></NewsItem>)
+
+
+    _isRefreshing = () =>  {
+        if(this.state.isRefreshing){
+            return <Image source={require('../asset/img/loading.gif')}  style={styles.loading} />
+        }else{
+            return <Animated.Image  style={[styles.refreshArrow,{transform: [{rotate:this.state.rotateValue.interpolate({inputRange:[0,180],outputRange:['0deg','-180deg']})}]}]}source={require('../asset/img/refresh.png')} />   
+        }
+    }
+
+    _renderHeader = () => (
+        <View style={styles.refreshBox}>
+            {this._isRefreshing()}
+            <Text style={styles.refreshText}>{this.state.refreshText}</Text>
+        </View>
+    )
+    
+
+    _renderItem = ({item,index}) => {
+        return (<NewsItem name={item.name}></NewsItem>)
+    }
+
+    _onScroll = e => {
+        if(!this.state.isLoadingMoved && e.nativeEvent.contentOffset.y < -30){
+            this.setState({
+                refreshText:'释放更新',
+                isLoadingMoved:true,
+            })
+            Animated.timing(this.state.rotateValue,{
+                toValue: 180,
+                duration: 90,
+                easing: Easing.linear,
+            }).start()
+        }
+    }
+
+    _onTouchEnd = e => {
+        if(this.state.isLoadingMoved){
+            this.setState({
+                refreshText:'加载中...',
+                isRefreshing:true
+            })
+            
+            this._scroll.scrollToOffset({animated: true, offset: 0})
+            this._fetchNews(1)
+            setTimeout(()=>{
+                this.setState({
+                    refreshText:'下拉刷新',
+                    isRefreshing:false,
+                    isLoadingMoved:false
+                })
+                Animated.timing(this.state.rotateValue,{
+                    toValue: 0,
+                    duration: 1,
+                }).start()
+                this._scroll.scrollToOffset({animated: true, offset: 60})
+            },2000)
+        }
     }
 
     async _fetchNews(page) {
-        let isRefreshing = page == 1 ? true : false;
-        let animating = !isRefreshing;
         this.setState({
             isLoading: true,
-            isRefreshing: isRefreshing,
-            animating: animating
+            animating: true
         });
 
         const newsInfo = await this.props.getHeads(this.state.currentPage);
+        
+        for (let item of newsInfo.result.newsList) {
+            item.key = Math.random();
+        }
+
         if (page == 1) {
             cacheNews.newsList = [];
         }
@@ -77,8 +139,8 @@ class Home extends Component {
         this.setState((preState) => ({
             currentPage: preState.currentPage + 1,
             isLoading: false,
-            dataSource: this.state.dataSource.cloneWithRows(cacheNews.newsList),
-            isRefreshing: false
+            dataList: cacheNews.newsList,
+            animating:false
         }))
 
     }
@@ -96,7 +158,7 @@ class Home extends Component {
 
     _loadOver() {
         if (!this._hasMore() && cacheNews.total !== 0) {
-            return <View style={{ height: 45, alignItems: 'center', }}><Text style={{ fontSize: 15, }}>没有啦</Text></View>
+            return <View style={{ height: 100, alignItems: 'center', }}><Text style={{ fontSize: 15, }}>没有啦</Text></View>
         }
 
         return <ActivityIndicator
@@ -157,7 +219,20 @@ class Home extends Component {
                                     </View>
                                 </View>
                             </View>
-                            <ListView
+                            <FlatList
+                                ref={(scroll) => {this._scroll = scroll}}
+                                onScroll={this._onScroll.bind(this)}
+                                onTouchEnd={this._onTouchEnd.bind(this)}
+                                ListHeaderComponent={this._renderHeader.bind(this)}
+                                contentInset={{ top: -60 }}
+                                contentOffset={{ y: 60 }}
+                                style={styles.scrollBg}
+                                data={this.state.dataList}
+                                onEndReachedThreshold={0.1}
+                                onEndReached={this._fetchMoreNews.bind(this)}
+                                renderItem={this._renderItem.bind(this)}
+                                ListFooterComponent={this._loadOver.bind(this)} />
+                            {/* <ListView
                                 dataSource={this.state.dataSource}
                                 contentInset={{ top: 55 }}
                                 contentOffset={{ y: -75 }}
@@ -177,7 +252,7 @@ class Home extends Component {
                                     />
                                 }
                                 style={{ backgroundColor: '#EEEEEE', }}
-                            />
+                            /> */}
                         </View>
                     </TabBar.Item>
                     <TabBar.Item
@@ -263,13 +338,13 @@ const deviceWidth = Dimensions.get('window').width;
 const deviceHeight = Dimensions.get('window').height;
 const styles = StyleSheet.create({
     top: {
-        height: 25,
+        height: 20,
         backgroundColor: 'rgba(238,238,238,0.9)',
     },
     header: {
         width: deviceWidth,
         backgroundColor: 'rgba(238,238,238,0.9)',
-        height: 50,
+        height: 55,
         flexDirection: 'row',
         borderBottomColor: '#e9e9e9',
         borderBottomWidth: 1,
@@ -351,5 +426,29 @@ const styles = StyleSheet.create({
         paddingLeft: 15,
         paddingRight: 15,
         flexWrap: 'wrap',
+    },
+    scrollBg:{
+        marginTop:75,
+        backgroundColor: '#EEEEEE',
+    },
+    refreshBox:{
+        flexDirection:'row',
+        width:deviceWidth,
+        height:60,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    loading:{
+        width:25,
+        height:25,
+    },
+    refreshArrow:{
+        width:25,
+        height:25,
+    },
+    refreshText:{
+        color:'red',
+        textAlign:'center',
+        fontSize:15,
     },
 });

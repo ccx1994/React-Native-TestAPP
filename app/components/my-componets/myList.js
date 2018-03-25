@@ -28,11 +28,11 @@ export default class Transmit extends Component {
     }
 
     _isLoading = () =>  {
-        if(this.state.isLoading){
-            return <Image source={require('../asset/img/loading.gif')}  style={styles.loading} />
-        }else{
-            return <Animated.Image  style={[styles.refreshArrow,{transform: [{rotate:this.state.rotateValue.interpolate({inputRange:[0,180],outputRange:['0deg','-180deg']})}]}]}source={require('../asset/img/refresh.png')} />   
-        }
+        // if(this.state.isLoading){
+        //     return <Image source={require('../asset/img/loading.gif')}  style={styles.loading} />
+        // }else{
+        //     return <Animated.Image  style={[styles.refreshArrow,{transform: [{rotate:this.state.rotateValue.interpolate({inputRange:[0,180],outputRange:['0deg','-180deg']})}]}]}source={require('../asset/img/refresh.png')} />   
+        // }
     }
 
     _renderHeader = () => (
